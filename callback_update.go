@@ -42,7 +42,11 @@ func Update(scope *Scope) {
 		var sqls []string
 
 		if updateAttrs, ok := scope.InstanceGet("gorm:update_attrs"); ok {
-			for key, value := range updateAttrs.(map[string]interface{}) {
+			aMap := updateAttrs.(map[string]interface{})
+			if _, exist := aMap["updated_at"]; exist == false {
+				aMap["updated_at"] = NowFunc()
+			}
+			for key, value := range aMap {
 				if scope.changeableDBColumn(key) {
 					sqls = append(sqls, fmt.Sprintf("%v = %v", scope.Quote(key), scope.AddToVars(value)))
 				}
