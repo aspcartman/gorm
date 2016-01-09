@@ -54,10 +54,9 @@ func (postgres) SqlTag(value reflect.Value, size int, autoIncrease bool) string 
 		}
 	default:
 		if isByteArrayOrSlice(value) {
-			if isUUID(value) {
-				return "uuid"
-			}
 			return "bytea"
+		} else if isUUID(value) {
+			return "uuid"
 		}
 	}
 	panic(fmt.Sprintf("invalid sql type %s (%s) for postgres", value.Type().Name(), value.Kind().String()))
@@ -70,7 +69,7 @@ func isByteArrayOrSlice(value reflect.Value) bool {
 }
 
 func isUUID(value reflect.Value) bool {
-	if value.Type().Len() != 16 {
+	if value.Kind() != reflect.Array || value.Type().Len() != 16 {
 		return false
 	}
 	typename := value.Type().Name()

@@ -228,11 +228,13 @@ func TestTableName(t *testing.T) {
 	DB.SingularTable(false)
 }
 
-func TestSqlNullValue(t *testing.T) {
+func TestNullValues(t *testing.T) {
 	DB.DropTable(&NullValue{})
 	DB.AutoMigrate(&NullValue{})
 
-	if err := DB.Save(&NullValue{Name: sql.NullString{String: "hello", Valid: true},
+	if err := DB.Save(&NullValue{
+		Name:    sql.NullString{String: "hello", Valid: true},
+		Gender:  &sql.NullString{String: "M", Valid: true},
 		Age:     sql.NullInt64{Int64: 18, Valid: true},
 		Male:    sql.NullBool{Bool: true, Valid: true},
 		Height:  sql.NullFloat64{Float64: 100.11, Valid: true},
@@ -244,11 +246,13 @@ func TestSqlNullValue(t *testing.T) {
 	var nv NullValue
 	DB.First(&nv, "name = ?", "hello")
 
-	if nv.Name.String != "hello" || nv.Age.Int64 != 18 || nv.Male.Bool != true || nv.Height.Float64 != 100.11 || nv.AddedAt.Valid != true {
+	if nv.Name.String != "hello" || nv.Gender.String != "M" || nv.Age.Int64 != 18 || nv.Male.Bool != true || nv.Height.Float64 != 100.11 || nv.AddedAt.Valid != true {
 		t.Errorf("Should be able to fetch null value")
 	}
 
-	if err := DB.Save(&NullValue{Name: sql.NullString{String: "hello-2", Valid: true},
+	if err := DB.Save(&NullValue{
+		Name:    sql.NullString{String: "hello-2", Valid: true},
+		Gender:  &sql.NullString{String: "F", Valid: true},
 		Age:     sql.NullInt64{Int64: 18, Valid: false},
 		Male:    sql.NullBool{Bool: true, Valid: true},
 		Height:  sql.NullFloat64{Float64: 100.11, Valid: true},
@@ -259,17 +263,43 @@ func TestSqlNullValue(t *testing.T) {
 
 	var nv2 NullValue
 	DB.First(&nv2, "name = ?", "hello-2")
-	if nv2.Name.String != "hello-2" || nv2.Age.Int64 != 0 || nv2.Male.Bool != true || nv2.Height.Float64 != 100.11 || nv2.AddedAt.Valid != false {
+	if nv2.Name.String != "hello-2" || nv2.Gender.String != "F" || nv2.Age.Int64 != 0 || nv2.Male.Bool != true || nv2.Height.Float64 != 100.11 || nv2.AddedAt.Valid != false {
 		t.Errorf("Should be able to fetch null value")
 	}
 
-	if err := DB.Save(&NullValue{Name: sql.NullString{String: "hello-3", Valid: false},
+	if err := DB.Save(&NullValue{
+		Name:    sql.NullString{String: "hello-3", Valid: false},
+		Gender:  &sql.NullString{String: "M", Valid: true},
 		Age:     sql.NullInt64{Int64: 18, Valid: false},
 		Male:    sql.NullBool{Bool: true, Valid: true},
 		Height:  sql.NullFloat64{Float64: 100.11, Valid: true},
 		AddedAt: NullTime{Time: time.Now(), Valid: false},
 	}).Error; err == nil {
 		t.Errorf("Can't save because of name can't be null")
+	}
+}
+
+func TestNullValuesWithFirstOrCreate(t *testing.T) {
+	var nv1 = NullValue{
+		Name:   sql.NullString{String: "first_or_create", Valid: true},
+		Gender: &sql.NullString{String: "M", Valid: true},
+	}
+
+	var nv2 NullValue
+	if err := DB.Where(nv1).FirstOrCreate(&nv2).Error; err != nil {
+		t.Errorf("Should not raise any error, but got %v", err)
+	}
+
+	if nv2.Name.String != "first_or_create" || nv2.Gender.String != "M" {
+		t.Errorf("first or create with nullvalues")
+	}
+
+	if err := DB.Where(nv1).Assign(NullValue{Age: sql.NullInt64{Int64: 18, Valid: true}}).FirstOrCreate(&nv2).Error; err != nil {
+		t.Errorf("Should not raise any error, but got %v", err)
+	}
+
+	if nv2.Age.Int64 != 18 {
+		t.Errorf("should update age to 18")
 	}
 }
 

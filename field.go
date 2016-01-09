@@ -3,6 +3,7 @@ package gorm
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"reflect"
 )
 
@@ -21,31 +22,23 @@ func (field *Field) Set(value interface{}) error {
 		return errors.New("unaddressable value")
 	}
 
-	if rvalue, ok := value.(reflect.Value); ok {
-		value = rvalue.Interface()
+	reflectValue, ok := value.(reflect.Value)
+	if !ok {
+		reflectValue = reflect.ValueOf(value)
 	}
 
-	if scanner, ok := field.Field.Addr().Interface().(sql.Scanner); ok {
-		if v, ok := value.(reflect.Value); ok {
-			if err := scanner.Scan(v.Interface()); err != nil {
-				return err
-			}
-		} else {
-			if err := scanner.Scan(value); err != nil {
-				return err
-			}
-		}
-	} else {
-		reflectValue, ok := value.(reflect.Value)
-		if !ok {
-			reflectValue = reflect.ValueOf(value)
-		}
-
+	if reflectValue.IsValid() {
 		if reflectValue.Type().ConvertibleTo(field.Field.Type()) {
 			field.Field.Set(reflectValue.Convert(field.Field.Type()))
+		} else if scanner, ok := field.Field.Addr().Interface().(sql.Scanner); ok {
+			if err := scanner.Scan(reflectValue.Interface()); err != nil {
+				return err
+			}
 		} else {
-			return errors.New("could not convert argument")
+			return fmt.Errorf("could not convert argument of field %s from %s to %s", field.Name, reflectValue.Type(), field.Field.Type())
 		}
+	} else {
+		field.Field.Set(reflect.Zero(field.Field.Type()))
 	}
 
 	field.IsBlank = isBlank(field.Field)
@@ -61,16 +54,16 @@ func (scope *Scope) Fields() map[string]*Field {
 		indirectValue := scope.IndirectValue()
 		isStruct := indirectValue.Kind() == reflect.Struct
 		for _, structField := range modelStruct.StructFields {
-			if isStruct {
-				fields[structField.DBName] = getField(indirectValue, structField)
-			} else {
-				fields[structField.DBName] = &Field{StructField: structField, IsBlank: true}
+			if field, ok := fields[structField.DBName]; !ok || field.IsIgnored {
+				if isStruct {
+					fields[structField.DBName] = getField(indirectValue, structField)
+				} else {
+					fields[structField.DBName] = &Field{StructField: structField, IsBlank: true}
+				}
 			}
 		}
 
-		if modelStruct.cached {
-			scope.fields = fields
-		}
+		scope.fields = fields
 		return fields
 	}
 	return scope.fields
